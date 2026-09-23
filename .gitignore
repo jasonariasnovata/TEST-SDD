@@ -2,3 +2,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 .env
+slack_approver/.env
+slack_approver/.tokens.json
+slack_approver/audit.jsonl
+*.pem
