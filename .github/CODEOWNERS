@@ -1,5 +1,12 @@
-# High-risk paths and the artefact gates get named reviewers.
-/src/auth/      @jasonariasnovata
-/specs/         @jasonariasnovata
-/.specify/      @jasonariasnovata
-/.github/       @jasonariasnovata
+# High-risk paths, the artefact gates, and every file that instructs or governs the AI
+# (prompts, standards, CI, ownership) need a named human owner's review.
+/src/auth/                @jasonariasnovata
+/specs/                   @jasonariasnovata
+/.specify/                @jasonariasnovata
+/.github/                 @jasonariasnovata
+/.claude/                 @jasonariasnovata
+/slack_approver/          @jasonariasnovata
+**/SKILL.md               @jasonariasnovata
+**/*.instructions.md      @jasonariasnovata
+/AGENTS.md                @jasonariasnovata
+/CLAUDE.md                @jasonariasnovata

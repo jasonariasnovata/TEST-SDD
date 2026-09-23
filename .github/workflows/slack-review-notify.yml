@@ -1,7 +1,7 @@
 name: slack-review-notify
 
 # Posts a review summary to Slack once the AI reviewer (Copilot) has submitted its review.
-# Notify only: the Slack button deep-links to the PR; the human approves in GitHub.
+# "View diff & approve" is handled by slack_approver/app.py; "Open in GitHub" is a plain link.
 on:
   pull_request_review:
     types: [submitted]
@@ -56,6 +56,7 @@ jobs:
             --arg risk "${risk:-unknown}" --arg gate "$gate_link" --arg files "$files" \
             --arg checks "$checks" --arg state "${REVIEW_STATE:-n/a}" \
             --arg signals "${signals:-RISK SIGNALS: not reported}" --arg summary "$summary" \
+            --arg value "$(jq -nc --arg repo "$REPO" --arg pr "$PR_NUMBER" --arg sha "$sha" '{repo:$repo, pr:$pr, sha:$sha}')" \
             '{
               text: "PR ready for human approval: \($title)",
               blocks: [
@@ -64,9 +65,10 @@ jobs:
                 {type:"section", text:{type:"mrkdwn", text:"*Checks:* \($checks)\n*AI review:* \($state) | \($signals)"}},
                 {type:"section", text:{type:"mrkdwn", text:"```\($summary)```"}},
                 {type:"actions", elements:[
-                  {type:"button", style:"primary", text:{type:"plain_text", text:"Review diff and approve in GitHub"}, url:"\($url)/files"}
+                  {type:"button", style:"primary", action_id:"view_diff", text:{type:"plain_text", text:"View diff & approve"}, value:$value},
+                  {type:"button", text:{type:"plain_text", text:"Open in GitHub"}, url:"\($url)/files"}
                 ]},
-                {type:"context", elements:[{type:"mrkdwn", text:"Approval is recorded in GitHub under your own identity. Do not approve without opening the diff."}]}
+                {type:"context", elements:[{type:"mrkdwn", text:"Approve is only available after the diff opens. It is recorded in GitHub under your own identity."}]}
               ]
             }')
           curl -sS -f -X POST -H 'Content-Type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"
