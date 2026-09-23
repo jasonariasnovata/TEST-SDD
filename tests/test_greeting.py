@@ -10,3 +10,7 @@ def test_greets_trimmed_name():
 def test_rejects_empty_name():
     with pytest.raises(ValueError):
         greet("   ")
+
+
+def test_greets_in_title_case():
+    assert greet("ada lovelace") == "Hello, Ada Lovelace!"
