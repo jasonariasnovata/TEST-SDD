@@ -1,0 +1,72 @@
+name: slack-review-notify
+
+# Posts a review summary to Slack once the AI reviewer (Copilot) has submitted its review.
+# Notify only: the Slack button deep-links to the PR; the human approves in GitHub.
+on:
+  pull_request_review:
+    types: [submitted]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to notify about (manual test)
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  notify:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.review.user.login, 'opilot')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build and send Slack message
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          REVIEW_BODY: ${{ github.event.review.body }}
+          REVIEW_STATE: ${{ github.event.review.state }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
+            echo "::warning::SLACK_WEBHOOK_URL secret not set; skipping."; exit 0
+          fi
+          pr=$(gh api "repos/$REPO/pulls/$PR_NUMBER")
+          title=$(jq -r .title <<<"$pr")
+          author=$(jq -r .user.login <<<"$pr")
+          url=$(jq -r .html_url <<<"$pr")
+          body=$(jq -r '.body // ""' <<<"$pr")
+          risk=$(grep -iEo '^Risk class:\s*\w+' <<<"$body" | awk '{print $3}' || true)
+          gate=$(grep -Eo '^Approved artifact PR:\s*#[0-9]+' <<<"$body" | grep -Eo '[0-9]+' || true)
+          files=$(jq -r '.changed_files' <<<"$pr")
+          sha=$(jq -r .head.sha <<<"$pr")
+          checks=$(gh api "repos/$REPO/commits/$sha/check-runs" \
+            --jq '[.check_runs[] | "\(.name): \(.conclusion // .status)"] | join(", ")')
+          signals=$(grep -Eo 'RISK SIGNALS:.*' <<<"${REVIEW_BODY:-}" | head -1 || true)
+          summary=$(printf '%s' "${REVIEW_BODY:-No AI review body (manual trigger).}" | head -c 600)
+          gate_link="none"
+          [ -n "$gate" ] && gate_link="<https://github.com/$REPO/pull/$gate|#$gate>"
+
+          payload=$(jq -n \
+            --arg title "$title" --arg url "$url" --arg author "$author" \
+            --arg risk "${risk:-unknown}" --arg gate "$gate_link" --arg files "$files" \
+            --arg checks "$checks" --arg state "${REVIEW_STATE:-n/a}" \
+            --arg signals "${signals:-RISK SIGNALS: not reported}" --arg summary "$summary" \
+            '{
+              text: "PR ready for human approval: \($title)",
+              blocks: [
+                {type:"header", text:{type:"plain_text", text:"Human approval needed"}},
+                {type:"section", text:{type:"mrkdwn", text:"*<\($url)|\($title)>*\nAuthor: \($author) | Risk: *\($risk)* | Files: \($files) | Gate PR: \($gate)"}},
+                {type:"section", text:{type:"mrkdwn", text:"*Checks:* \($checks)\n*AI review:* \($state) | \($signals)"}},
+                {type:"section", text:{type:"mrkdwn", text:"```\($summary)```"}},
+                {type:"actions", elements:[
+                  {type:"button", style:"primary", text:{type:"plain_text", text:"Review diff and approve in GitHub"}, url:"\($url)/files"}
+                ]},
+                {type:"context", elements:[{type:"mrkdwn", text:"Approval is recorded in GitHub under your own identity. Do not approve without opening the diff."}]}
+              ]
+            }')
+          curl -sS -f -X POST -H 'Content-Type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"

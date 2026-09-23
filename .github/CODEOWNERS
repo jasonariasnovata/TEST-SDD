@@ -1,0 +1,5 @@
+# High-risk paths and the artefact gates get named reviewers.
+/src/auth/      @jasonariasnovata
+/specs/         @jasonariasnovata
+/.specify/      @jasonariasnovata
+/.github/       @jasonariasnovata
